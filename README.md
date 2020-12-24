@@ -1,4 +1,4 @@
-# ARIMAandVAR
+# SARIMAandVAR
 Macroeconomic Projections using time series econometrics
 Abstract
 Assessing the impacts of external shocks often involves measuring and modelling the past and using the historical information to make predictions for the future. In the recent scenario of COVID lockdown, wherein the imposed restrictions by the government for the benefit of larger society had stalled the economic activity in the country. In this paper, the economic activity is predicted while maintaining that the event in question had never happened in the first place. These predictions are then compared to the actual measurements (which are taken after the event has happened) and any differences – while taking into account all other changes to be constant – are then interpretable as the impact of that event. We adopt this methodology in the context of the coronavirus pandemic and use this framework to assess the quantitative impact of the lockdown and disruptions on measures of growth: The Gross Domestic Product, The Industrial Index of Production and its components. 
