@@ -1,0 +1,166 @@
+---
+title: "IIP Mining Index_projections"
+date: "15/06/2020"
+output: html_document
+---
+
+Loading and cleaning of data
+
+```{r setup, include=FALSE}
+library(tseries)
+library(tidyverse)
+library(readxl)
+library(ggplot2)
+library(lmtest)
+library(urca)
+library(forecast)
+
+IIP <- read.csv("C:/Users/ramya.emandi/Desktop/Econ Policy/Macro Projections/IIP_load.csv")
+
+View(IIP)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Define date and arrange ascending 
+```{r}
+library(lubridate)
+#format(Sys.Date(), "%a %b %d")
+Daterow <- seq.Date(from = as.Date("2012/4/01"), to = as.Date("2020/3/01"), by = "month")
+Daterow <- as.Date(Daterow, format = "%m/%y")
+
+IIP <- cbind(Daterow,IIP)
+as.Date(IIP$Daterow, "%m, %y")
+
+View(IIP)
+```
+
+```{r}
+plot(IIP$Daterow, IIP$Mining, type = "l", xlab = "year",ylab = "Mining Index")
+# IIP doesn't look stationary 
+```
+
+
+```{r}
+d.mine <- diff(IIP$Mining)
+plot(d.mine, type="l", xlab = "year",ylab = "Mining Index")
+#Lambda<- BoxCox.lambda(IIP$Manufacturing)
+#summary(Lambda)
+#plot(Lambda)
+# d.GI looks stationary 
+```
+
+```{r}
+#summary(IIP$Mining)
+#summary(d.mine)
+```
+
+perform Dickey Fuller tests and augmented Dickey Fuller test to be statistically obvious and proceed.
+
+```{r}
+#DF & ADF tests for stationarity in Y 
+#k is the number of lags, Dickey Fuller test for stationarity
+#adf.test(IIP$Mining,"stationary", k=0)
+
+#k is the number of lags, Augmented Dickey Fuller test for stationarity
+#adf.test(IIP$Mining,"stationary")
+
+#DF & ADF for diff(positive cases)
+#adf.test(d.mine,"stationary",k=0)
+#adf.test(d.mine,"stationary")
+```
+
+The autocorrelation function (ACF) gives the autocorrelation at all possible lags. The autocorrelation at lag 0 is included by default which always takes the value 1 as it represents the correlation between the data and themselves. This function also helps in predicting which model to use under time series. 1. Autoregression (AR) model 2. Moving average (MA) model 3. ARMA (AR+MA) 4. ARIMA Autoregression Integrated Moving Average model. As well as to get a rough estimate of number of lags in the model.
+```{r}
+#ACF and PACF graphs for visualising the differenced value 
+#acf(d.mine, na.action = na.omit)
+#pacf(d.mine, na.action = na.omit)
+```
+As we can infer from the graph above, the autocorrelation continues to decrease as the lag increases, confirming that there is no linear association between observations separated by larger lags. Also, the autocorrelation is oscillating, meaning the coefficient of the dependent variable is negative. 
+
+![Approximate Model](C:/Users/ramya.emandi/Pictures/ACF_PACF.png)
+
+# Time Series Modelling
+```{r}
+#ARIMA Model
+#auto.arima(IIP$Mining, trace=TRUE) 
+```
+
+All the possible models are estimated here, Under ARIMA model (p,d,q)
+p = number of lags for autoregression (i.e. past values of IIP)
+d = number of times differenced (Integrated)
+q = number of lags of the residual value (i.e. past values of the unexplained error term)
+
+and it is observed that all estimated models have d = 1. As we already, saw earlier that out positive cases was not statonary. Hence, the auto.arima function made the series stationary by differencing it once. As tested earlier, which is stationary.
+
+The best model suggested is ARIMA(2,1,0) . We have to check the AIC/ BIC values for its minimal to choose the model. At the same time, the model should be parsimonious i.e. having lesser varaibles. 
+
+ARIMA(2,1,0) is the best model as per lowest AIC value. Estimating the model below -
+
+```{r}
+#fitarima <- Arima(IIP$Manufacturing, order = c(1,1,0), include.drift = FALSE)
+#coeftest(fitarima)
+```
+
+All the estimates are significant with p values < 0.05. 
+
+Residuals should be awhite noise, if not, there is some information left out in the residuals that is not captured in the projection
+For white noise series, we expect each autocorrelation to be close to zero. Of course, they will not be exactly equal to zero as there is some random variation. For a white noise series, we expect 95% of the spikes in the ACF to lie within ±2/√T  where  T is the length of the time series. It is common to plot these bounds on a graph of the ACF (the blue dashed lines above). If one or more large spikes are outside these bounds, or if substantially more than 5% of spikes are outside these bounds, then the series is probably not white noise.
+```{r}
+#checkresiduals(fitarima)
+```
+The ACF plot of the residuals from the ARIMA model shows that all autocorrelations are not within the threshold limits, indicating that the residuals are not behaving like white noise. A portmanteau test returns a small p-value, also suggesting that the residuals are not white noise.
+
+Seasonal Trend Decomposition using Loess (STL) works as an additive process where the data is decomposed into trend, seasonality and remainder and each component of the data can be taken apart for analysis.
+ the strength of seasonality on the data and get a score for it using this formula:
+![Approximate Model](C:/Users/ramya.emandi/Pictures/seasonality.png)
+Source: https://otexts.com/fpp2/seasonal-strength.html
+A seasonal strength of above 0.64 has been regarded as strong
+
+```{r}
+t <- as.vector(t(IIP$Mining))
+ts <- ts(t[1:96], start = c(2012,04), frequency = 12)
+
+View(ts)
+
+modelStl <- stl(ts, s.window = "periodic")
+
+plot(modelStl)
+```
+we note that the trend dominates the data series and consequently the grey bars are of similar size.
+
+Seasonal Mixed Model
+
+```{r}
+library(astsa)
+diff12 <- diff(IIP$Mining, 12)
+adf.test(diff12, "stationary")
+acf2(diff12,48)
+#diff12and1 <- diff(diff12,1)
+#acf2(diff12and1,48)
+plot (diff12, type = "l", xlab = "lag", ylab ="Stationary Seasonally adjusted Mining Index")
+#adf.test(diff1and12, "stationary")
+```
+
+```{r}
+
+fit <- auto.arima(ts, trace=TRUE, test="kpss", ic="bic")
+sarima(ts, 1,0,0,0,1,1,12)
+
+#serial.test(test, lags.pt=10, type="PT.asymptotic")
+#Box.test(test$residuals,type="Ljung",lag=20)
+```
+
+Forecasting
+```{r}
+for0 <- forecast(fit,6)
+for0
+plot(for0, type = "l", xlab = "year", ylab ="Forecasted Mining Index")
+for1 <- sarima.for(ts, 6, 1,0,0,0,1,1,12)
+round(for1$pred)
+round(for1$se, 2)
+```
+The output prints the forecasts and the standard errors of the forecasts, and supplies a graphic of the forecast with +/- 1 and 2 prediction error bounds
+
+###### author: "Ramya Emandi"
+

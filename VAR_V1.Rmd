@@ -1,0 +1,164 @@
+---
+title: "VAR_V1"
+date: "03/08/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(vars)
+library(readxl)
+VAR_DATASET <- read_excel("C:/Users/ramya.emandi/Desktop/Econ Policy/Macro Projections/VAR_DATASET.xlsx", sheet = "VAR")
+
+VAR_DATASET$Date <- as.yearqtr(VAR_DATASET$Date, format = "%Y:0%q")
+
+GDP <- ts(VAR_DATASET$GDP_MP, start = c(2004,1), end = c(2019,4), frequency = 4)
+
+inf <- ts(VAR_DATASET$inf, start = c(2004,1), end = c(2019,4), frequency = 4)
+
+M1 <- ts(VAR_DATASET$M1, start = c(2004,1), end = c(2019,4), frequency = 4)
+
+rep <- ts(VAR_DATASET$rep, start = c(2004,1), end = c(2019,4), frequency = 4)
+
+View(VAR_DATASET)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Framing the matrix
+```{r}
+library(MASS)
+sd.inf <-diff(inf, differences = 2)
+sd.gdp <-diff(GDP, differences =  2)
+sd.M1 <- diff(M1, differences =  2)
+sd.rep <- diff(rep, differences = 2)
+
+
+#bc.rep <- boxcox(rep ~ inf+GDP+M1)
+#bc.rep
+
+#lambda <- bc.rep$x # lambda values
+
+#lik <- bc.rep$y # log likelihood values for SSE
+
+#bc <- cbind(lambda, lik) # combine lambda and lik
+
+#sorted_bc <- bc[order(-lik),] # values are sorted to identify the lambda value for the maximum log likelihood for obtaining minimum SSE
+
+#head(sorted_bc, n = 10)
+
+
+VAR_org <- window(ts.union(inf,GDP,M1,rep), start = c(2004,1), end = c(2019,4))
+
+VAR_stat <- window(ts.union(sd.inf,sd.gdp,sd.M1,sd.rep), start = c(2004,1), end = c(2019,4))
+
+#plot.ts(VAR_org)
+#plot.ts(VAR_stat)
+plot(VAR_stat, nc = 2, xlab = "", ylab = "year", main = "Time Series Plots of Stationary Data")
+plot(VAR_org, nc = 2, xlab = "", ylab = "year", main = "Time Series Plots - Inflation | GDP | Narrow Money | Repo Rate")
+
+```
+Making the series stationary, check ACF, PACF
+```{r}
+library(urca)
+library(tseries)
+#pp.test(GDP)
+#pp.test(l.gdp)
+summary(ur.ers(window(VAR_stat, start = c(2004, 1), end = c(2019, 4)),model = "trend", lag.max = 2))
+
+#DF & ADF tests for stationarity in Y 
+#k is the number of lags, Augmented Dickey Fuller test for stationarity
+adf.test(sd.inf,"stationary")
+adf.test(sd.gdp,"stationary")
+adf.test(sd.M1,"stationary")
+adf.test(sd.rep,"stationary")
+
+```
+
+
+Lag Length Selection for unrestricted VAR
+```{r}
+VARselect(VAR_stat, lag.max = 8, type = "both")[["selection"]]
+#VARselect(VAR_org, lag.max = 8, type = "both")
+```
+Lag lenth output = 3. Checking majorly AIC and SC (other name for BIC) 
+We construct multivariate order 3 VAR model, VAR(3).
+
+```{r}
+VAR <- VAR(VAR_stat, p = 3, type = "both")
+
+#VAR <- VAR(VAR_org, p = 1, type = "both")
+summary(VAR)
+
+serial.test(VAR, lags.pt=10, type="PT.asymptotic")
+```
+
+Forecast
+```{r}
+#library(tsDyn)
+library(dplyr)
+library(forecast)
+library(ggplot2)
+VAR.f <- predict(VAR,n.ahead=4)
+VAR.f
+plot(VAR.f, nc = 2, xlab = "")
+fanchart(VAR.f, nc = 2, xlab = "")
+forecast(VAR) %>% autoplot() + xlab("Year")
+```
+Arranging the forecasts (from stationary series) to be able to arrive at original series
+```{r}
+#View(VAR.f)
+C1 <- (VAR.f$fcst$sd.inf[,1])
+C2 <- (VAR.f$fcst$sd.gdp[,1])
+C3 <- (VAR.f$fcst$sd.M1[,1])
+C4 <- (VAR.f$fcst$sd.rep[,1])
+
+fd.inf <-diff(inf, differences = 1)
+fd.gdp <-diff(GDP, differences =  1)
+fd.M1 <- diff(M1, differences =  1)
+fd.rep <- diff(rep, differences = 1)
+
+VAR_fd <- cbind(fd.inf, fd.gdp, fd.M1, fd.rep)
+
+VAR_ORG_STAT <- cbind (inf, GDP, M1, rep, fd.inf, fd.gdp, fd.M1, fd.rep, sd.inf, sd.gdp, sd.M1, sd.rep)
+For_Stat <- cbind(for.inf = C1, for.gdp = C2, for.M1 = C3, for.rep = C4)
+View(For_Stat)
+STAT <- rbind(VAR_stat, For_Stat)
+
+View(VAR_ORG_STAT)
+
+dediff1 <- For_Stat[1,]+ VAR_ORG_STAT[64,5:8]
+dediff2 <- dediff1 + VAR_ORG_STAT[64,1:4]
+  
+dediffrow2 <- matrix(0, nrow = 1, ncol = 4)
+dediffMatrix <- dediff2 
+for (i in 2:4) {
+dediffrow1 <- For_Stat[i,]+ dediff1
+dediffrow2 <- dediffrow1 + dediff2
+dediffMatrix <- rbind(dediffMatrix, dediffrow2) 
+}
+
+dediffMatrix
+
+org_forecast <- rbind(VAR_org, dediffMatrix)
+matrix(org_forecast, nrow = 68, ncol = 4)
+
+View(org_forecast)
+
+F.INF <- ts(org_forecast[,1],start = c(2004,1), end = c(2020,4), frequency = 4)
+F.GDP <- ts(org_forecast[,2],start = c(2004,1), end = c(2020,4), frequency = 4)
+F.M1 <- ts(org_forecast[,3],start = c(2004,1), end = c(2020,4), frequency = 4)
+F.REP <- ts(org_forecast[,4],start = c(2004,1), end = c(2020,4), frequency = 4)
+
+org_forecast <- window(ts.union(F.INF, F.GDP, F.M1, F.REP), start = c(2004,1), end = c(2020,4))
+
+plot.ts(org_forecast, nc = 2, xlab = "", col = "blue", main="Forecasted Values along with historical time series")
+#lines(VAR_org, nc = 2, xlab = "", col = "blue") 
+
+zoom <- ts(org_forecast[-(1:64),], start = c(2020,1), end =c(2020,4), frequency = 4)
+#ggplot(zoom, aes(x= (start = c(2018,1), end =c(2020,4), frequency = 4), y = zoom, colour = "red")) 
+plot.ts(zoom, nc = 2, xlab = "", type = "o",col = "red", main="Only Forecasted Values")  
+
+```
+
+
+######author: "Ramya Emandi"
